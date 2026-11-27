@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Learn how a bigram model finds word pairs and predicts the next word.">
+  <title>Bigram Lab — Learn how words connect</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#top"><span class="brand-icon">b</span> Bigram Lab</a>
+    <span class="github-link">Python-powered learning</span>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="eyebrow"><span class="eyebrow-dot"></span> A tiny language model</div>
+      <h1>Words have<br><span>neighbors.</span></h1>
+      <p class="hero-copy">A bigram model learns which words tend to follow each other. Give it a little text and see how it makes its next-word guess.</p>
+      <a class="scroll-link" href="#playground">Try it yourself <span>↓</span></a>
+      <div class="hero-art" aria-hidden="true">
+        <div class="art-word art-the">the</div>
+        <div class="art-word art-cat">cat</div>
+        <div class="art-word art-sat">sat</div>
+        <div class="art-word art-mat">mat</div>
+        <svg viewBox="0 0 440 215" role="presentation"><path d="M112 64 C160 28 194 28 225 71"/><path d="M263 80 C303 102 309 126 302 148"/><path d="M264 165 C211 197 166 184 126 148"/><path d="M101 124 C82 108 83 91 99 79"/></svg>
+        <span class="art-caption">one word at a time</span>
+      </div>
+    </section>
+
+    <section class="lesson" aria-label="How a bigram works">
+      <div class="section-kicker">THE IDEA <span>01 / 03</span></div>
+      <div class="lesson-grid">
+        <h2>Look at two<br>words at a time.</h2>
+        <div>
+          <p class="lesson-copy">A <strong>bigram</strong> is a pair of neighboring words. In “the cat sat on the mat,” the first pair is “the cat,” followed by “cat sat,” and so on.</p>
+          <div class="example-pairs"><span>the <b>cat</b></span><span>cat <b>sat</b></span><span>sat <b>on</b></span><span>on <b>the</b></span><span>the <b>mat</b></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="playground" id="playground">
+      <div class="section-kicker">YOUR TURN <span>02 / 03</span></div>
+      <div class="playground-head">
+        <div><h2>Teach it a sentence.</h2><p>Use a few sentences for more interesting patterns. Separate words with spaces.</p></div>
+        <button class="sample-button" id="sampleButton" type="button">Load an example <span>↻</span></button>
+      </div>
+      <div class="input-card">
+        <label for="textInput">TEXT TO LEARN FROM</label>
+        <textarea id="textInput" rows="4" spellcheck="false">i love cats i love dogs i hate rain</textarea>
+        <div class="query-row">
+          <div class="query-field"><label for="wordInput">WHICH WORD SHOULD COME NEXT?</label><input id="wordInput" type="text" value="i" spellcheck="false"></div>
+          <button id="runButton" type="button"><span class="button-label">Explore the bigrams</span><span aria-hidden="true">↗</span></button>
+        </div>
+      </div>
+      <p class="runtime-status" id="status" aria-live="polite">Starting the Python model…</p>
+      <p class="error-message" id="error" role="alert"></p>
+    </section>
+
+    <section class="results" id="results" hidden>
+      <div class="section-kicker">WHAT THE MODEL SEES <span>03 / 03</span></div>
+      <div class="result-grid">
+        <article class="result-card pairs-card"><div class="card-heading"><span class="step-number">1</span><div><h3>Word pairs</h3><p>Every neighboring pair, in order.</p></div></div><div class="pair-list" id="pairList"></div></article>
+        <article class="result-card table-card"><div class="card-heading"><span class="step-number">2</span><div><h3>Next-word table</h3><p>What each word was followed by.</p></div></div><div class="next-table" id="nextTable"></div></article>
+        <article class="result-card prediction-card"><div class="card-heading"><span class="step-number">3</span><div><h3>Next-word guess</h3><p>The most common neighbor wins.</p></div></div><div class="prediction" id="prediction"></div><p class="tie-note" id="tieNote"></p></article>
+      </div>
+      <p class="explain-note">When two next words occur equally often, the model picks the one it saw first. It only looks one word back, so it doesn’t understand meaning.</p>
+    </section>
+  </main>
+
+  <footer><span>BIGRAM LAB</span><span>Small patterns. Simple predictions.</span></footer>
+
+  <script>
+    let pyodide;
+
+    const pythonCode = `
+import json
+
+def explore(text, search_word):
+    words = text.lower().split()
+    pairs = []
+    next_words = {}
+
+    for i in range(len(words) - 1):
+        word = words[i]
+        next_word = words[i + 1]
+        pairs.append([word, next_word])
+
+        if word not in next_words:
+            next_words[word] = []
+        next_words[word].append(next_word)
+
+    table = []
+    for word in next_words:
+        table.append([word, next_words[word]])
+
+    choices = next_words.get(search_word.lower(), [])
+    prediction = "NONE"
+    counts = {}
+
+    for word in choices:
+        if word not in counts:
+            counts[word] = 0
+        counts[word] += 1
+
+    if choices:
+        prediction = choices[0]
+        for word in choices:
+            if counts[word] > counts[prediction]:
+                prediction = word
+
+    return json.dumps({"pairs": pairs, "table": table, "prediction": prediction, "query": search_word.lower(), "choices": choices})
+`;
+
+    async function startPython() {
+      const status = document.getElementById("status");
+      try {
+        pyodide = await loadPyodide();
+        await pyodide.runPythonAsync(pythonCode);
+        status.textContent = "Python model ready. Try changing the text or search word.";
+        document.getElementById("runButton").disabled = false;
+        runModel();
+      } catch (error) {
+        status.textContent = "The Python model could not start. Check your internet connection and reload.";
+        document.getElementById("error").textContent = error.message;
+      }
+    }
+
+    function runModel() {
+      if (!pyodide) return;
+      const text = document.getElementById("textInput").value.trim();
+      const query = document.getElementById("wordInput").value.trim();
+      const error = document.getElementById("error");
+      error.textContent = "";
+      if (!text) {
+        error.textContent = "Enter some text for the model to learn from.";
+        return;
+      }
+      if (!query) {
+        error.textContent = "Enter a word to predict from.";
+        return;
+      }
+
+      const result = JSON.parse(pyodide.globals.get("explore")(text, query));
+      document.getElementById("results").hidden = false;
+      showPairs(result.pairs);
+      showTable(result.table);
+      showPrediction(result);
+    }
+
+    function showPairs(pairs) {
+      const list = document.getElementById("pairList");
+      list.replaceChildren();
+      if (pairs.length === 0) {
+        list.textContent = "No pairs yet — add at least two words.";
+        return;
+      }
+      pairs.forEach((pair, index) => {
+        const row = document.createElement("div");
+        row.className = "pair-row";
+        const number = document.createElement("span");
+        number.className = "row-number";
+        number.textContent = String(index + 1).padStart(2, "0");
+        const words = document.createElement("span");
+        words.className = "pair-words";
+        words.textContent = pair[0] + "  " + pair[1];
+        row.append(number, words);
+        list.append(row);
+      });
+    }
+
+    function showTable(table) {
+      const area = document.getElementById("nextTable");
+      area.replaceChildren();
+      table.forEach((entry) => {
+        const row = document.createElement("div");
+        row.className = "table-row";
+        const word = document.createElement("span");
+        word.className = "table-word";
+        word.textContent = entry[0];
+        const next = document.createElement("span");
+        next.className = "table-next";
+        next.textContent = entry[1].join(" ");
+        row.append(word, next);
+        area.append(row);
+      });
+    }
+
+    function showPrediction(result) {
+      const box = document.getElementById("prediction");
+      box.replaceChildren();
+      const prefix = document.createElement("span");
+      prefix.textContent = result.query + " →";
+      const answer = document.createElement("strong");
+      answer.textContent = result.prediction;
+      box.append(prefix, answer);
+      document.getElementById("tieNote").textContent = result.choices.length
+        ? "From " + result.choices.length + " observed next-word " + (result.choices.length === 1 ? "example." : "examples.")
+        : "This word has no next-word examples in the text.";
+    }
+
+    document.getElementById("runButton").addEventListener("click", runModel);
+    document.getElementById("sampleButton").addEventListener("click", () => {
+      document.getElementById("textInput").value = "i love cats i love dogs i hate rain";
+      document.getElementById("wordInput").value = "i";
+      runModel();
+    });
+    document.getElementById("textInput").addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) runModel();
+    });
+    document.getElementById("wordInput").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") runModel();
+    });
+    startPython();
+  </script>
+</body>
+</html>
